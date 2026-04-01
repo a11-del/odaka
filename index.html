@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="大崎時刻表">
+<title>大崎時刻表</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  :root {
+    --bg: #f5f5f7;
+    --card: #ffffff;
+    --text: #1c1c1e;
+    --sub: #6e6e73;
+    --hint: #aeaeb2;
+    --border: rgba(0,0,0,0.1);
+    --bus-color: #0f6e56;
+    --train-color: #185fa5;
+    --active-bg: #fff3e0;
+    --active-text: #854f0b;
+    --tight-color: #ba7517;
+    --ok-color: #1d9e75;
+    --past-opacity: 0.32;
+    --accent: #d85a30;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #000000;
+      --card: #1c1c1e;
+      --text: #f5f5f7;
+      --sub: #8e8e93;
+      --hint: #48484a;
+      --border: rgba(255,255,255,0.1);
+      --bus-color: #5dcaa5;
+      --train-color: #85b7eb;
+      --active-bg: #3d2b00;
+      --active-text: #fac775;
+      --ok-color: #5dcaa5;
+      --tight-color: #ef9f27;
+      --accent: #f0997b;
+    }
+  }
+  body {
+    font-family: -apple-system, 'Helvetica Neue', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 15px;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--card);
+    border-bottom: 0.5px solid var(--border);
+    padding: 12px 16px 8px;
+    padding-top: calc(12px + env(safe-area-inset-top));
+  }
+  .header-top { display: flex; align-items: baseline; justify-content: space-between; }
+  h1 { font-size: 17px; font-weight: 600; color: var(--text); }
+  .route { font-size: 11px; color: var(--sub); margin-top: 2px; }
+  .clock-wrap {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--bg); border-radius: 10px; padding: 8px 12px; margin-top: 8px;
+  }
+  #clock { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text); letter-spacing: 0.5px; }
+  .next-wrap { flex: 1; }
+  .next-label { font-size: 10px; color: var(--sub); }
+  #next-bus { font-size: 14px; font-weight: 600; color: var(--bus-color); }
+  #next-osaki { font-size: 12px; color: var(--train-color); margin-top: 1px; }
+
+  /* date picker row */
+  .date-row {
+    display: flex; align-items: center; gap: 8px; margin-top: 8px;
+  }
+  .date-label { font-size: 11px; color: var(--sub); white-space: nowrap; }
+  #date-picker {
+    flex: 1;
+    border: 0.5px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    font-family: inherit;
+    padding: 6px 8px;
+    -webkit-appearance: none;
+    appearance: none;
+    outline: none;
+  }
+  #day-badge {
+    font-size: 12px; font-weight: 700;
+    padding: 4px 9px; border-radius: 6px;
+    white-space: nowrap;
+    background: rgba(0,0,0,0.06);
+    color: var(--sub);
+    transition: background 0.2s, color 0.2s;
+  }
+  #day-badge.wd { background: rgba(24,95,165,0.12); color: var(--train-color); }
+  #day-badge.sat { background: rgba(15,110,86,0.12); color: var(--bus-color); }
+  #day-badge.hol { background: rgba(216,90,48,0.15); color: var(--accent); }
+  #today-btn {
+    font-size: 11px; font-weight: 600;
+    padding: 5px 10px; border-radius: 7px;
+    border: 0.5px solid var(--border);
+    background: var(--bg); color: var(--sub);
+    cursor: pointer; white-space: nowrap;
+    -webkit-appearance: none;
+  }
+
+  .tabs { display: none; }
+  .tab { display: none; }
+  .legend { display: flex; gap: 12px; padding: 6px 0 2px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--sub); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .dot-b { background: var(--bus-color); }
+  .dot-t { background: var(--train-color); }
+  .dot-a { background: var(--accent); }
+
+  main { padding: 8px 0 24px; }
+  .hour-header {
+    padding: 4px 16px; font-size: 11px; font-weight: 600;
+    color: var(--sub); letter-spacing: 0.04em; text-transform: uppercase;
+    background: var(--bg); position: sticky; top: var(--header-h, 210px); z-index: 10;
+  }
+  .row {
+    display: grid;
+    grid-template-columns: 52px 68px 58px 38px 58px 58px 1fr;
+    align-items: center;
+    padding: 6px 16px;
+    border-bottom: 0.5px solid var(--border);
+    background: var(--card);
+    gap: 0;
+  }
+  .row.past { opacity: var(--past-opacity); }
+  .row.active { background: var(--active-bg); }
+  .row.active .time { color: var(--active-text) !important; }
+  .row.active .transfer { color: var(--active-text) !important; }
+  .row.active .badge { background: rgba(186,117,23,0.15); color: var(--active-text); }
+  .col { padding: 0 3px; }
+  .col-label { font-size: 9px; color: var(--sub); line-height: 1; display: block; margin-bottom: 2px; }
+  .time { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; display: block; white-space: nowrap; }
+  .time-b { color: var(--bus-color); }
+  .time-t { color: var(--train-color); }
+  .badge {
+    display: inline-block; font-size: 9px; font-weight: 600;
+    padding: 1px 5px; border-radius: 4px;
+    background: rgba(0,0,0,0.06); color: var(--sub);
+    white-space: nowrap; margin-top: 2px;
+  }
+  .transfer { font-size: 12px; font-weight: 600; text-align: center; display: block; }
+  .tf-ok { color: var(--ok-color); }
+  .tf-tight { color: var(--tight-color); }
+  .tf-long { color: var(--sub); }
+  .dest { font-size: 11px; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+
+<header id="header">
+  <div class="header-top">
+    <div>
+      <h1>大崎 時刻表 <span style="font-size:11px;color:var(--sub);font-weight:400;">自宅→バス停10分</span></h1>
+      <div class="route">左近山第２ → 二俣川 → 大崎（相鉄JR直通）</div>
+    </div>
+  </div>
+  <div class="clock-wrap">
+    <div id="clock">--:--:--</div>
+    <div class="next-wrap">
+      <div class="next-label">次に乗れるバス</div>
+      <div id="next-bus">--:--</div>
+      <div id="next-osaki"></div>
+    </div>
+  </div>
+
+  <!-- 日付選択 -->
+  <div class="date-row">
+    <span class="date-label">日付</span>
+    <input type="date" id="date-picker" onchange="onDateChange()">
+    <span id="day-badge">―</span>
+    <button id="today-btn" onclick="goToday()">今日</button>
+  </div>
+
+
+  <div class="legend">
+    <div class="legend-item"><div class="dot dot-b"></div>バス</div>
+    <div class="legend-item"><div class="dot dot-t"></div>電車（→大崎 約34分）</div>
+    <div class="legend-item"><div class="dot dot-a"></div>乗車可能</div>
+  </div>
+</header>
+
+<main>
+  <div id="tbl-weekday"></div>
+  <div id="tbl-saturday" class="hidden"></div>
+  <div id="tbl-holiday" class="hidden"></div>
+</main>
+
+<script>
+// ── 祝日リスト（内閣府データ：2024〜2026年） ──────────────────────────────
+const HOLIDAYS = new Set([
+  // 2024
+  '2024-01-01','2024-01-08','2024-02-11','2024-02-12','2024-02-23',
+  '2024-03-20','2024-04-29','2024-05-03','2024-05-04','2024-05-05','2024-05-06',
+  '2024-07-15','2024-08-11','2024-08-12','2024-09-16','2024-09-22','2024-09-23',
+  '2024-10-14','2024-11-03','2024-11-04','2024-11-23',
+  // 2025
+  '2025-01-01','2025-01-13','2025-02-11','2025-02-23','2025-02-24',
+  '2025-03-20','2025-04-29','2025-05-03','2025-05-04','2025-05-05','2025-05-06',
+  '2025-07-21','2025-08-11','2025-09-15','2025-09-21','2025-09-22','2025-09-23',
+  '2025-10-13','2025-11-03','2025-11-23','2025-11-24',
+  // 2026
+  '2026-01-01','2026-01-12','2026-02-11','2026-02-23','2026-03-20',
+  '2026-04-29','2026-05-03','2026-05-04','2026-05-05','2026-05-06',
+  '2026-07-20','2026-08-11','2026-09-21','2026-09-22','2026-09-23',
+  '2026-10-12','2026-11-03','2026-11-23',
+]);
+
+// 日付文字列 "YYYY-MM-DD" → 区分
+function dayType(dateStr){
+  if(HOLIDAYS.has(dateStr)) return 'holiday';
+  const d = new Date(dateStr+'T00:00:00');
+  const dow = d.getDay(); // 0=日, 6=土
+  if(dow === 0) return 'holiday';
+  if(dow === 6) return 'saturday';
+  return 'weekday';
+}
+
+// 今日の日付を "YYYY-MM-DD" で返す
+function todayStr(){
+  const d = new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+// 日付 → バッジ表示
+function badgeInfo(type, dateStr){
+  const d = new Date(dateStr+'T00:00:00');
+  const DOW = ['日','月','火','水','木','金','土'];
+  const dow = DOW[d.getDay()];
+  if(HOLIDAYS.has(dateStr)){
+    return {label: dow+'（祝）', cls: 'hol'};
+  }
+  if(type==='saturday') return {label: dow+'曜日', cls: 'sat'};
+  if(type==='holiday')  return {label: dow+'曜日', cls: 'hol'};
+  return {label: dow+'曜日', cls: 'wd'};
+}
+
+// ── バスデータ ───────────────────────────────────────────────────────────────
+// 2025年3月15日改定（相鉄バス公式）旭1・旭6 左近山第２→二俣川駅南口行きのみ
+// ※旭2（保土ヶ谷バイパス経由二俣川駅北口行き）は除外
+const busWeekday=[
+  // 5時
+  {h:5,m:54,r:'旭1'},
+  // 6時
+  {h:6,m:11,r:'旭1'},{h:6,m:19,r:'旭1'},{h:6,m:29,r:'旭1'},{h:6,m:40,r:'旭1'},{h:6,m:45,r:'旭1'},{h:6,m:51,r:'旭6'},{h:6,m:57,r:'旭1'},
+  // 7時
+  {h:7,m:3,r:'旭1'},{h:7,m:7,r:'旭6'},{h:7,m:24,r:'旭1'},{h:7,m:34,r:'旭1'},{h:7,m:40,r:'旭6'},{h:7,m:46,r:'旭1'},{h:7,m:52,r:'旭6'},{h:7,m:58,r:'旭1'},
+  // 8時
+  {h:8,m:4,r:'旭1'},{h:8,m:8,r:'旭6'},{h:8,m:16,r:'旭1'},{h:8,m:24,r:'旭6'},{h:8,m:32,r:'旭1'},{h:8,m:38,r:'旭1'},{h:8,m:42,r:'旭6'},{h:8,m:48,r:'旭1'},{h:8,m:51,r:'旭6'},
+  // 9時
+  {h:9,m:0,r:'旭1'},{h:9,m:4,r:'旭6'},{h:9,m:13,r:'旭1'},{h:9,m:19,r:'旭6'},{h:9,m:24,r:'旭1'},{h:9,m:28,r:'旭6'},{h:9,m:34,r:'旭1'},{h:9,m:40,r:'旭6'},{h:9,m:46,r:'旭6'},{h:9,m:52,r:'旭6'},
+  // 10時
+  {h:10,m:2,r:'旭6'},{h:10,m:14,r:'旭6'},{h:10,m:26,r:'旭6'},{h:10,m:38,r:'旭6'},{h:10,m:50,r:'旭6'},
+  // 11時
+  {h:11,m:2,r:'旭6'},{h:11,m:14,r:'旭6'},{h:11,m:26,r:'旭6'},{h:11,m:33,r:'旭1'},{h:11,m:38,r:'旭6'},{h:11,m:50,r:'旭6'},
+  // 12時
+  {h:12,m:2,r:'旭6'},{h:12,m:14,r:'旭6'},{h:12,m:26,r:'旭6'},{h:12,m:38,r:'旭6'},{h:12,m:50,r:'旭6'},{h:12,m:56,r:'旭1'},
+  // 13時
+  {h:13,m:2,r:'旭6'},{h:13,m:14,r:'旭6'},{h:13,m:20,r:'旭1'},{h:13,m:26,r:'旭6'},{h:13,m:38,r:'旭6'},{h:13,m:47,r:'旭1'},{h:13,m:58,r:'旭6'},
+  // 14時
+  {h:14,m:14,r:'旭6'},{h:14,m:20,r:'旭1'},{h:14,m:26,r:'旭6'},{h:14,m:38,r:'旭6'},{h:14,m:50,r:'旭6'},
+  // 15時
+  {h:15,m:2,r:'旭6'},{h:15,m:14,r:'旭6'},{h:15,m:26,r:'旭1'},{h:15,m:36,r:'旭6'},{h:15,m:44,r:'旭1'},{h:15,m:47,r:'旭6'},{h:15,m:59,r:'旭6'},
+  // 16時
+  {h:16,m:7,r:'旭6'},{h:16,m:11,r:'旭1'},{h:16,m:16,r:'旭6'},{h:16,m:27,r:'旭1'},{h:16,m:37,r:'旭6'},{h:16,m:43,r:'旭1'},{h:16,m:47,r:'旭6'},{h:16,m:57,r:'旭6'},
+  // 17時
+  {h:17,m:2,r:'旭1'},{h:17,m:7,r:'旭6'},{h:17,m:14,r:'旭1'},{h:17,m:19,r:'旭6'},{h:17,m:25,r:'旭6'},{h:17,m:35,r:'旭6'},{h:17,m:39,r:'旭1'},{h:17,m:43,r:'旭1'},{h:17,m:50,r:'旭6'},{h:17,m:55,r:'旭1'},{h:17,m:59,r:'旭6'},
+  // 18時
+  {h:18,m:5,r:'旭1'},{h:18,m:8,r:'旭6'},{h:18,m:17,r:'旭6'},{h:18,m:26,r:'旭6'},{h:18,m:29,r:'旭1'},{h:18,m:35,r:'旭6'},{h:18,m:39,r:'旭1'},{h:18,m:43,r:'旭6'},{h:18,m:51,r:'旭6'},
+  // 19時（19:42は左近山第1止まりのため除外）
+  {h:19,m:0,r:'旭6'},{h:19,m:7,r:'旭6'},{h:19,m:17,r:'旭6'},{h:19,m:25,r:'旭6'},{h:19,m:33,r:'旭6'},{h:19,m:40,r:'旭6'},{h:19,m:52,r:'旭6'},{h:19,m:58,r:'旭6'},
+];
+const busSaturday=[
+  // 5時
+  {h:5,m:50,r:'旭1'},
+  // 6時
+  {h:6,m:4,r:'旭1'},{h:6,m:14,r:'旭1'},{h:6,m:24,r:'旭1'},{h:6,m:34,r:'旭6'},{h:6,m:44,r:'旭1'},{h:6,m:53,r:'旭6'},
+  // 7時
+  {h:7,m:5,r:'旭1'},{h:7,m:14,r:'旭6'},{h:7,m:24,r:'旭1'},{h:7,m:33,r:'旭6'},{h:7,m:44,r:'旭1'},{h:7,m:56,r:'旭6'},
+  // 8時（8:07は左近山第1止まりのため除外）
+  {h:8,m:3,r:'旭1'},{h:8,m:11,r:'旭1'},{h:8,m:20,r:'旭6'},{h:8,m:26,r:'旭1'},{h:8,m:31,r:'旭6'},{h:8,m:38,r:'旭1'},{h:8,m:43,r:'旭6'},{h:8,m:56,r:'旭6'},
+  // 9時（9:06・9:46は左近山第1止まりのため除外→9:06除外、9:46は旭6二俣川行き）
+  {h:9,m:4,r:'旭1'},{h:9,m:16,r:'旭1'},{h:9,m:23,r:'旭6'},{h:9,m:34,r:'旭6'},{h:9,m:46,r:'旭6'},{h:9,m:58,r:'旭6'},
+  // 10時（10:46は左近山第1止まりのため除外）
+  {h:10,m:11,r:'旭6'},{h:10,m:22,r:'旭6'},{h:10,m:35,r:'旭6'},{h:10,m:49,r:'旭1'},{h:10,m:58,r:'旭6'},
+  // 11時（11:20は左近山第1止まりのため除外）
+  {h:11,m:11,r:'旭6'},{h:11,m:26,r:'旭1'},{h:11,m:34,r:'旭6'},{h:11,m:49,r:'旭1'},{h:11,m:58,r:'旭6'},
+  // 12時（12:08・12:56は左近山第1止まりのため除外）
+  {h:12,m:14,r:'旭1'},{h:12,m:22,r:'旭6'},{h:12,m:34,r:'旭6'},{h:12,m:46,r:'旭6'},
+  // 13時（13:20は左近山第1止まりのため除外）
+  {h:13,m:2,r:'旭1'},{h:13,m:10,r:'旭6'},{h:13,m:26,r:'旭1'},{h:13,m:34,r:'旭6'},{h:13,m:46,r:'旭6'},{h:13,m:58,r:'旭6'},
+  // 14時（14:20は左近山第1止まりのため除外）
+  {h:14,m:10,r:'旭6'},{h:14,m:26,r:'旭1'},{h:14,m:34,r:'旭6'},{h:14,m:46,r:'旭6'},{h:14,m:58,r:'旭6'},
+  // 15時（15:44は左近山第1止まりのため除外）
+  {h:15,m:10,r:'旭6'},{h:15,m:22,r:'旭6'},{h:15,m:34,r:'旭6'},{h:15,m:49,r:'旭1'},{h:15,m:58,r:'旭6'},
+  // 16時（16:32は左近山第1止まりのため除外）
+  {h:16,m:10,r:'旭6'},{h:16,m:22,r:'旭6'},{h:16,m:38,r:'旭1'},{h:16,m:46,r:'旭6'},{h:16,m:58,r:'旭6'},
+  // 17時
+  {h:17,m:10,r:'旭6'},{h:17,m:22,r:'旭6'},{h:17,m:34,r:'旭6'},{h:17,m:46,r:'旭6'},{h:17,m:58,r:'旭6'},
+  // 18時（18:08・18:32は左近山第1止まりのため除外）
+  {h:18,m:15,r:'旭1'},{h:18,m:22,r:'旭6'},{h:18,m:43,r:'旭1'},{h:18,m:46,r:'旭6'},{h:18,m:58,r:'旭6'},
+  // 19時（19:20・19:44は左近山第1止まりのため除外）
+  {h:19,m:10,r:'旭6'},{h:19,m:31,r:'旭1'},{h:19,m:34,r:'旭6'},{h:19,m:54,r:'旭1'},{h:19,m:58,r:'旭6'},
+];
+const busHoliday=[
+  // 5時
+  {h:5,m:58,r:'旭1'},
+  // 6時
+  {h:6,m:14,r:'旭1'},{h:6,m:24,r:'旭1'},{h:6,m:34,r:'旭1'},{h:6,m:44,r:'旭1'},{h:6,m:54,r:'旭6'},
+  // 7時
+  {h:7,m:4,r:'旭1'},{h:7,m:14,r:'旭6'},{h:7,m:23,r:'旭1'},{h:7,m:34,r:'旭6'},{h:7,m:42,r:'旭1'},{h:7,m:51,r:'旭6'},
+  // 8時
+  {h:8,m:3,r:'旭6'},{h:8,m:15,r:'旭6'},{h:8,m:29,r:'旭6'},{h:8,m:41,r:'旭6'},{h:8,m:54,r:'旭6'},
+  // 9時（9:05・9:32は左近山第1止まりのため除外）
+  {h:9,m:9,r:'旭1'},{h:9,m:22,r:'旭6'},{h:9,m:36,r:'旭1'},{h:9,m:46,r:'旭6'},{h:9,m:58,r:'旭6'},
+  // 10時（10:20・10:44は左近山第1止まりのため除外）
+  {h:10,m:10,r:'旭6'},{h:10,m:22,r:'旭1'},{h:10,m:34,r:'旭6'},{h:10,m:47,r:'旭1'},{h:10,m:58,r:'旭6'},
+  // 11時（11:44は左近山第1止まりのため除外）
+  {h:11,m:10,r:'旭6'},{h:11,m:22,r:'旭6'},{h:11,m:34,r:'旭6'},{h:11,m:48,r:'旭1'},{h:11,m:58,r:'旭6'},
+  // 12時（12:08・12:32は左近山第1止まりのため除外）
+  {h:12,m:12,r:'旭1'},{h:12,m:22,r:'旭6'},{h:12,m:36,r:'旭1'},{h:12,m:46,r:'旭6'},{h:12,m:58,r:'旭6'},
+  // 13時
+  {h:13,m:10,r:'旭6'},{h:13,m:22,r:'旭6'},{h:13,m:34,r:'旭6'},{h:13,m:47,r:'旭6'},{h:13,m:58,r:'旭6'},
+  // 14時（14:08・14:32・14:56は左近山第1止まりのため除外）
+  {h:14,m:12,r:'旭1'},{h:14,m:22,r:'旭6'},{h:14,m:35,r:'旭1'},{h:14,m:46,r:'旭6'},
+  // 15時（15:32・15:56は左近山第1止まりのため除外）
+  {h:15,m:0,r:'旭1'},{h:15,m:10,r:'旭6'},{h:15,m:22,r:'旭6'},{h:15,m:36,r:'旭1'},{h:15,m:46,r:'旭6'},
+  // 16時
+  {h:16,m:0,r:'旭1'},{h:16,m:10,r:'旭6'},{h:16,m:21,r:'旭6'},{h:16,m:33,r:'旭6'},{h:16,m:45,r:'旭6'},{h:16,m:57,r:'旭6'},
+  // 17時（17:07・17:31は左近山第1止まりのため除外）
+  {h:17,m:12,r:'旭1'},{h:17,m:21,r:'旭6'},{h:17,m:36,r:'旭1'},{h:17,m:45,r:'旭6'},{h:17,m:57,r:'旭6'},
+  // 18時（18:19・18:43は左近山第1止まりのため除外）
+  {h:18,m:9,r:'旭6'},{h:18,m:24,r:'旭1'},{h:18,m:33,r:'旭6'},{h:18,m:48,r:'旭1'},{h:18,m:55,r:'旭6'},
+  // 19時（19:07は左近山第1止まりのため除外）
+  {h:19,m:11,r:'旭1'},{h:19,m:21,r:'旭6'},
+];
+// 二俣川発 相鉄JR直通線（大崎経由）のみ抽出 ※2026年3月14日改正ダイヤ（バスは2025年3月15日改定）
+// 東急直通（西高島平・日吉等）・相鉄線内（横浜・羽沢等）は除外
+const trainWD=[
+  // 5時
+  {h:5,m:17,d:'渋谷'},{h:5,m:28,d:'渋谷'},{h:5,m:38,d:'新宿'},{h:5,m:40,d:'浦和美園'},{h:5,m:50,d:'浦和美園'},{h:5,m:57,d:'新宿'},
+  // 6時
+  {h:6,m:13,d:'浦和美園'},{h:6,m:26,d:'新宿'},{h:6,m:35,d:'浦和美園'},{h:6,m:46,d:'川越'},{h:6,m:47,d:'森林公園'},{h:6,m:54,d:'浦和美園'},{h:6,m:57,d:'新宿'},
+  // 7時
+  {h:7,m:1,d:'赤羽岩淵'},{h:7,m:14,d:'新宿'},{h:7,m:20,d:'大宮'},{h:7,m:24,d:'浦和美園'},{h:7,m:26,d:'高崎'},{h:7,m:32,d:'池袋'},{h:7,m:35,d:'浦和美園'},{h:7,m:39,d:'赤羽岩淵'},{h:7,m:47,d:'新宿'},{h:7,m:54,d:'川越'},{h:7,m:56,d:'浦和美園'},
+  // 8時
+  {h:8,m:2,d:'池袋'},{h:8,m:5,d:'高崎'},{h:8,m:9,d:'池袋'},{h:8,m:11,d:'浦和美園'},{h:8,m:17,d:'渋谷'},{h:8,m:23,d:'浦和美園'},{h:8,m:29,d:'新宿'},{h:8,m:36,d:'浦和美園'},{h:8,m:45,d:'川越'},{h:8,m:49,d:'新宿'},{h:8,m:56,d:'西高島平'},
+  // 9時（西高島平は東急直通のため除外済み→8:56は除外、ここは残す）
+  {h:9,m:1,d:'赤羽岩淵'},{h:9,m:9,d:'新宿'},{h:9,m:26,d:'新宿'},{h:9,m:31,d:'浦和美園'},{h:9,m:39,d:'新宿'},{h:9,m:46,d:'川越'},
+  // 10時
+  {h:10,m:6,d:'新宿'},{h:10,m:26,d:'新宿'},{h:10,m:31,d:'浦和美園'},{h:10,m:46,d:'新宿'},{h:10,m:51,d:'浦和美園'},
+  // 11時
+  {h:11,m:6,d:'新宿'},{h:11,m:26,d:'新宿'},{h:11,m:31,d:'浦和美園'},{h:11,m:46,d:'新宿'},{h:11,m:51,d:'浦和美園'},
+  // 12時
+  {h:12,m:6,d:'新宿'},{h:12,m:26,d:'新宿'},{h:12,m:31,d:'浦和美園'},{h:12,m:46,d:'新宿'},{h:12,m:51,d:'浦和美園'},
+  // 13時
+  {h:13,m:6,d:'新宿'},{h:13,m:26,d:'新宿'},{h:13,m:31,d:'浦和美園'},{h:13,m:46,d:'新宿'},{h:13,m:51,d:'浦和美園'},
+  // 14時
+  {h:14,m:6,d:'新宿'},{h:14,m:26,d:'新宿'},{h:14,m:31,d:'浦和美園'},{h:14,m:46,d:'新宿'},{h:14,m:51,d:'浦和美園'},
+  // 15時
+  {h:15,m:6,d:'新宿'},{h:15,m:26,d:'新宿'},{h:15,m:31,d:'浦和美園'},{h:15,m:46,d:'新宿'},{h:15,m:51,d:'浦和美園'},
+  // 16時
+  {h:16,m:6,d:'新宿'},{h:16,m:21,d:'浦和美園'},{h:16,m:26,d:'新宿'},{h:16,m:36,d:'新宿'},{h:16,m:41,d:'浦和美園'},{h:16,m:46,d:'新宿'},
+  // 17時
+  {h:17,m:1,d:'新宿'},{h:17,m:6,d:'浦和美園'},{h:17,m:11,d:'新宿'},{h:17,m:16,d:'新宿'},{h:17,m:21,d:'浦和美園'},{h:17,m:31,d:'新宿'},{h:17,m:36,d:'浦和美園'},{h:17,m:41,d:'新宿'},{h:17,m:51,d:'新宿'},{h:17,m:56,d:'浦和美園'},
+  // 18時
+  {h:18,m:1,d:'新宿'},{h:18,m:6,d:'浦和美園'},{h:18,m:11,d:'新宿'},{h:18,m:21,d:'新宿'},{h:18,m:26,d:'浦和美園'},{h:18,m:31,d:'新宿'},{h:18,m:36,d:'浦和美園'},{h:18,m:41,d:'新宿'},{h:18,m:51,d:'新宿'},{h:18,m:56,d:'浦和美園'},
+  // 19時
+  {h:19,m:1,d:'新宿'},{h:19,m:11,d:'新宿'},{h:19,m:16,d:'浦和美園'},{h:19,m:21,d:'新宿'},{h:19,m:31,d:'新宿'},{h:19,m:41,d:'新宿'},{h:19,m:51,d:'新宿'},{h:19,m:56,d:'浦和美園'},
+];
+// 土曜・休日 大崎経由JR直通列車
+const trainSH=[
+  // 5時
+  {h:5,m:28,d:'小田原'},{h:5,m:38,d:'新宿'},{h:5,m:50,d:'渋谷'},{h:5,m:57,d:'新宿'},
+  // 6時
+  {h:6,m:21,d:'新宿'},{h:6,m:42,d:'大宮'},{h:6,m:53,d:'鳩ヶ谷'},
+  // 7時
+  {h:7,m:2,d:'大宮'},{h:7,m:3,d:'志木'},{h:7,m:15,d:'大宮'},{h:7,m:27,d:'渋谷'},{h:7,m:39,d:'浦和美園'},{h:7,m:41,d:'川越'},{h:7,m:49,d:'川越'},{h:7,m:56,d:'浦和美園'},
+  // 8時
+  {h:8,m:9,d:'高崎'},{h:8,m:11,d:'浦和美園'},{h:8,m:29,d:'新宿'},{h:8,m:36,d:'浦和美園'},{h:8,m:45,d:'川越'},{h:8,m:49,d:'新宿'},
+  // 9時
+  {h:9,m:1,d:'赤羽岩淵'},{h:9,m:9,d:'新宿'},{h:9,m:26,d:'新宿'},{h:9,m:31,d:'浦和美園'},{h:9,m:39,d:'新宿'},{h:9,m:46,d:'川越'},
+  // 10時
+  {h:10,m:6,d:'新宿'},{h:10,m:26,d:'新宿'},{h:10,m:31,d:'浦和美園'},{h:10,m:46,d:'新宿'},{h:10,m:51,d:'浦和美園'},
+  // 11時
+  {h:11,m:6,d:'新宿'},{h:11,m:26,d:'新宿'},{h:11,m:31,d:'浦和美園'},{h:11,m:46,d:'新宿'},{h:11,m:51,d:'浦和美園'},
+  // 12時
+  {h:12,m:6,d:'新宿'},{h:12,m:26,d:'新宿'},{h:12,m:31,d:'浦和美園'},{h:12,m:46,d:'新宿'},{h:12,m:51,d:'浦和美園'},
+  // 13時
+  {h:13,m:6,d:'新宿'},{h:13,m:26,d:'新宿'},{h:13,m:31,d:'浦和美園'},{h:13,m:46,d:'新宿'},{h:13,m:51,d:'浦和美園'},
+  // 14時
+  {h:14,m:6,d:'新宿'},{h:14,m:26,d:'新宿'},{h:14,m:31,d:'浦和美園'},{h:14,m:46,d:'新宿'},{h:14,m:51,d:'浦和美園'},
+  // 15時
+  {h:15,m:6,d:'新宿'},{h:15,m:26,d:'新宿'},{h:15,m:31,d:'浦和美園'},{h:15,m:46,d:'新宿'},{h:15,m:51,d:'浦和美園'},
+  // 16時
+  {h:16,m:6,d:'新宿'},{h:16,m:21,d:'浦和美園'},{h:16,m:26,d:'新宿'},{h:16,m:36,d:'新宿'},{h:16,m:41,d:'浦和美園'},{h:16,m:46,d:'新宿'},
+  // 17時
+  {h:17,m:1,d:'新宿'},{h:17,m:6,d:'浦和美園'},{h:17,m:11,d:'新宿'},{h:17,m:21,d:'浦和美園'},{h:17,m:31,d:'新宿'},{h:17,m:41,d:'新宿'},{h:17,m:51,d:'新宿'},{h:17,m:56,d:'浦和美園'},
+  // 18時
+  {h:18,m:1,d:'新宿'},{h:18,m:11,d:'新宿'},{h:18,m:26,d:'浦和美園'},{h:18,m:31,d:'新宿'},{h:18,m:41,d:'新宿'},{h:18,m:56,d:'浦和美園'},
+  // 19時
+  {h:19,m:1,d:'新宿'},{h:19,m:11,d:'新宿'},{h:19,m:21,d:'新宿'},{h:19,m:31,d:'新宿'},{h:19,m:41,d:'新宿'},{h:19,m:51,d:'浦和美園'},
+];
+
+function fmt(h,m){return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');}
+function toMin(h,m){return h*60+m;}
+function addMin(h,m,a){let t=h*60+m+a;return{h:Math.floor(t/60)%24,m:t%60};}
+function nextTrain(aH,aM,trains){
+  let lim=toMin(aH,aM)+3;
+  for(let t of trains)if(toMin(t.h,t.m)>=lim)return t;
+  return null;
+}
+function buildRows(bus,trains){
+  return bus.map(b=>{
+    let arr=addMin(b.h,b.m,15);
+    let tr=nextTrain(arr.h,arr.m,trains);
+    if(!tr)return null;
+    let tf=toMin(tr.h,tr.m)-toMin(arr.h,arr.m);
+    let os=addMin(tr.h,tr.m,34);
+    let hm=addMin(b.h,b.m,-10);
+    return{home:hm,busDep:{h:b.h,m:b.m},busArr:arr,train:tr,transfer:tf,osaki:os,dest:tr.d,route:b.r};
+  }).filter(Boolean);
+}
+
+const RWD=buildRows(busWeekday,trainWD);
+const RSat=buildRows(busSaturday,trainSH);
+const RHol=buildRows(busHoliday,trainSH);
+
+let currentDay='weekday';
+let isToday=true; // 選択中の日付が今日かどうか
+
+function renderTable(rows,id){
+  let html='';
+  let prevH=-1;
+  rows.forEach((r,i)=>{
+    if(r.busDep.h!==prevH){
+      // hour-header は data-hour を持たせ、後で表示制御する
+      html+=`<div class="hour-header" data-hour="${r.busDep.h}">${r.busDep.h}時台</div>`;
+      prevH=r.busDep.h;
+    }
+    let tc=r.transfer<5?'tf-tight':r.transfer>=15?'tf-long':'tf-ok';
+    html+=`<div class="row" data-idx="${i}" data-home="${toMin(r.home.h,r.home.m)}">
+      <div class="col"><span class="col-label">自宅発</span><span class="time">${fmt(r.home.h,r.home.m)}</span></div>
+      <div class="col"><span class="col-label">バス発</span><span class="time time-b">${fmt(r.busDep.h,r.busDep.m)}</span><span class="badge">${r.route}</span></div>
+      <div class="col"><span class="col-label">二俣川着</span><span class="time time-b">${fmt(r.busArr.h,r.busArr.m)}</span></div>
+      <div class="col" style="text-align:center;"><span class="col-label">乗換</span><span class="transfer ${tc}">${r.transfer}分</span></div>
+      <div class="col"><span class="col-label">電車発</span><span class="time time-t">${fmt(r.train.h,r.train.m)}</span></div>
+      <div class="col"><span class="col-label">大崎着</span><span class="time time-t">${fmt(r.osaki.h,r.osaki.m)}</span></div>
+      <div class="col"><span class="col-label">行き先</span><span class="dest">${r.dest}方面</span></div>
+    </div>`;
+  });
+  document.getElementById(id).innerHTML=html;
+}
+
+renderTable(RWD,'tbl-weekday');
+renderTable(RSat,'tbl-saturday');
+renderTable(RHol,'tbl-holiday');
+
+function getRows(){return currentDay==='weekday'?RWD:currentDay==='saturday'?RSat:RHol;}
+function getTblId(){return 'tbl-'+currentDay;}
+
+// 当日モードのとき：自宅発が現在時刻より前の行をDOMから削除し、
+// 行がなくなった時間帯ヘッダーも非表示にする
+function applyTodayFilter(){
+  const tbl=document.getElementById(getTblId());
+  if(!tbl)return;
+  const nowMin=new Date().getHours()*60+new Date().getMinutes();
+  let lastVisibleHour=-1;
+  // まず全行・全ヘッダーを表示に戻す
+  tbl.querySelectorAll('.row,.hour-header').forEach(el=>el.style.display='');
+  if(!isToday) return; // 当日以外は全件表示
+  // 過去の行を非表示
+  tbl.querySelectorAll('.row').forEach(el=>{
+    let hm=parseInt(el.dataset.home);
+    if(hm < nowMin) el.style.display='none';
+  });
+  // 表示中の行がない時間帯ヘッダーを非表示
+  tbl.querySelectorAll('.hour-header').forEach(hdr=>{
+    const hour=parseInt(hdr.dataset.hour);
+    // この hour-header に続く .row で表示中のものがあるか確認
+    let sibling=hdr.nextElementSibling;
+    let hasVisible=false;
+    while(sibling && sibling.classList.contains('row')){
+      if(sibling.style.display!=='none'){hasVisible=true;break;}
+      sibling=sibling.nextElementSibling;
+    }
+    hdr.style.display=hasVisible?'':'none';
+  });
+}
+
+function updateHighlight(){
+  const now=new Date();
+  const nowMin=now.getHours()*60+now.getMinutes();
+  const rows=getRows();
+  const tbl=document.getElementById(getTblId());
+  if(!tbl)return;
+  // active クラスのみ管理（past は当日フィルタで非表示にするので不要）
+  tbl.querySelectorAll('.row').forEach(el=>el.classList.remove('active','past'));
+  let activeIdx=-1;
+  for(let i=0;i<rows.length;i++){
+    if(toMin(rows[i].home.h,rows[i].home.m)+1>=nowMin){activeIdx=i;break;}
+  }
+  if(activeIdx>=0){
+    let el=tbl.querySelector(`[data-idx="${activeIdx}"]`);
+    if(el){el.classList.add('active');}
+    let r=rows[activeIdx];
+    document.getElementById('next-bus').textContent=fmt(r.busDep.h,r.busDep.m)+' 発';
+    document.getElementById('next-osaki').textContent='大崎 '+fmt(r.osaki.h,r.osaki.m)+' 着予定';
+  } else {
+    document.getElementById('next-bus').textContent='本日終了';
+    document.getElementById('next-osaki').textContent='';
+  }
+  applyTodayFilter();
+}
+
+function tick(){
+  const n=new Date();
+  document.getElementById('clock').textContent=
+    String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0')+':'+String(n.getSeconds()).padStart(2,'0');
+  if(n.getSeconds()===0)updateHighlight();
+}
+
+// タブ切り替え（手動ボタン）
+function showDay(day, btn){
+  currentDay=day;
+  ['tbl-weekday','tbl-saturday','tbl-holiday'].forEach(id=>document.getElementById(id).className=id==='tbl-'+day?'':'hidden');
+  updateHighlight();
+}
+
+// タブをプログラムから切り替え
+function switchToDay(day){
+  currentDay=day;
+  ['tbl-weekday','tbl-saturday','tbl-holiday'].forEach(id=>document.getElementById(id).className=id==='tbl-'+day?'':'hidden');
+  updateHighlight();
+}
+
+// 日付ピッカー変更時
+function onDateChange(){
+  const ds = document.getElementById('date-picker').value; // "YYYY-MM-DD"
+  if(!ds) return;
+  isToday = (ds === todayStr());
+  const type = dayType(ds);
+  const {label, cls} = badgeInfo(type, ds);
+  const badge = document.getElementById('day-badge');
+  badge.textContent = label;
+  badge.className = 'day-badge';  // reset
+  badge.id = 'day-badge';
+  badge.className = cls; // set new
+  badge.id = 'day-badge';
+  switchToDay(type);
+}
+
+// 今日ボタン
+function goToday(){
+  const ds = todayStr();
+  document.getElementById('date-picker').value = ds;
+  onDateChange();
+}
+
+// ヘッダー高さ調整
+window.addEventListener('load',()=>{
+  const h=document.getElementById('header');
+  document.documentElement.style.setProperty('--header-h', h.offsetHeight+'px');
+  // 今日の日付で初期化
+  goToday();
+});
+
+updateHighlight();
+setInterval(tick,1000);
+tick();
+</script>
+</body>
+</html>
